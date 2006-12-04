@@ -1,0 +1,184 @@
+// Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005 Philip Aston
+// All rights reserved.
+//
+// This file is part of The Grinder software distribution. Refer to
+// the file LICENSE which is part of The Grinder distribution for
+// licensing details. The Grinder distribution is available on the
+// Internet at http://grinder.sourceforge.net/
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+// REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+// HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+// OF THE POSSIBILITY OF SUCH DAMAGE.
+
+package net.grinder.console.messages;
+
+import junit.framework.TestCase;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.util.Collection;
+import java.util.HashSet;
+
+import net.grinder.common.WorkerIdentity;
+import net.grinder.communication.Message;
+import net.grinder.engine.agent.PublicAgentIdentityImplementation;
+import net.grinder.statistics.ExpressionView;
+import net.grinder.statistics.StatisticExpressionFactory;
+import net.grinder.statistics.StatisticsServicesImplementation;
+import net.grinder.statistics.StatisticsSetFactory;
+import net.grinder.statistics.TestStatisticsMap;
+import net.grinder.testutility.Serializer;
+
+
+/**
+ *  Unit test case for console messages.
+ *
+ * @author Philip Aston
+ * @version $Revision$
+ */
+public class TestConsoleMessages extends TestCase {
+
+  private static Message serialise(Message original) throws Exception {
+    return (Message) Serializer.serialize(original);
+  }
+
+  public void testRegisterStatisticsViewMessage() throws Exception {
+
+    final ExpressionView expressionView =
+      new ExpressionView("One", "userLong0");
+
+    final RegisterExpressionViewMessage original =
+      new RegisterExpressionViewMessage(expressionView);
+
+    final RegisterExpressionViewMessage received =
+      (RegisterExpressionViewMessage) serialise(original);
+
+    assertEquals(original.getExpressionView(),
+                 received.getExpressionView());
+
+    final StatisticExpressionFactory statisticExpressionFactory =
+      StatisticsServicesImplementation.getInstance()
+      .getStatisticExpressionFactory();
+
+    final ExpressionView view2 =
+      new ExpressionView("My view2",
+                         statisticExpressionFactory.createExpression(
+                           "userLong0"));
+    try {
+      serialise(new RegisterExpressionViewMessage(view2));
+      fail("Expected IOException");
+    }
+    catch (IOException e) {
+    }
+
+    final ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+    final ObjectOutputStream objectStream = new ObjectOutputStream(byteStream);
+    original.writeExternal(objectStream);
+    objectStream.close();
+
+    // Corrupt the serialised message.
+    final byte[] bytes = byteStream.toByteArray();
+    bytes[bytes.length - 5] = 'X';
+
+    final RegisterExpressionViewMessage incomingMessage =
+      new RegisterExpressionViewMessage();
+    try {
+      incomingMessage.readExternal(
+        new ObjectInputStream(new ByteArrayInputStream(bytes)));
+
+      fail("Expected IOException");
+    } catch (IOException e) {
+    }
+  }
+
+  public void testRegisterTestsMessage() throws Exception {
+
+    final Collection c = new HashSet();
+
+    final RegisterTestsMessage original = new RegisterTestsMessage(c);
+
+    assertEquals(c, original.getTests());
+
+    final RegisterTestsMessage received =
+      (RegisterTestsMessage) serialise(original);
+
+    assertEquals(original.getTests(), received.getTests());
+  }
+
+  public void testReportStatisticsMessage() throws Exception {
+
+    final StatisticsSetFactory statisticsSetFactory =
+      StatisticsServicesImplementation.getInstance().getStatisticsSetFactory();
+    final TestStatisticsMap statisticsDelta =
+      new TestStatisticsMap(statisticsSetFactory);
+
+    final ReportStatisticsMessage original =
+      new ReportStatisticsMessage(statisticsDelta);
+
+    assertEquals(statisticsDelta, original.getStatisticsDelta());
+
+    final ReportStatisticsMessage received =
+      (ReportStatisticsMessage) serialise(original);
+
+    assertEquals(original.getStatisticsDelta(), received.getStatisticsDelta());
+  }
+
+  public void testWorkerReportMessage() throws Exception {
+
+    final PublicAgentIdentityImplementation agentIdentity =
+      new PublicAgentIdentityImplementation("Agent");
+    final WorkerIdentity workerIdentity =
+      agentIdentity.createWorkerIdentity();
+
+    final WorkerProcessReportMessage original =
+      new WorkerProcessReportMessage(
+        workerIdentity, (short)1, (short)2, (short)3);
+
+    assertEquals(workerIdentity, original.getWorkerIdentity());
+    assertEquals(workerIdentity, original.getIdentity());
+    assertEquals(1, original.getState());
+    assertEquals(2, original.getNumberOfRunningThreads());
+    assertEquals(3, original.getMaximumNumberOfThreads());
+
+    final WorkerProcessReportMessage received =
+      (WorkerProcessReportMessage) serialise(original);
+
+    assertEquals(workerIdentity, original.getWorkerIdentity());
+    assertEquals(workerIdentity, original.getIdentity());
+    assertEquals(1, received.getState());
+    assertEquals(2, received.getNumberOfRunningThreads());
+    assertEquals(3, received.getMaximumNumberOfThreads());
+  }
+
+  public void testAgentReportMessage() throws Exception {
+
+    final PublicAgentIdentityImplementation agentIdentity =
+      new PublicAgentIdentityImplementation("Agent");
+
+    final AgentProcessReportMessage original =
+      new AgentProcessReportMessage(agentIdentity, (short)1);
+
+    assertEquals(agentIdentity, original.getAgentIdentity());
+    assertEquals(agentIdentity, original.getIdentity());
+    assertEquals(1, original.getState());
+
+    final AgentProcessReportMessage received =
+      (AgentProcessReportMessage) serialise(original);
+
+    assertEquals(agentIdentity, original.getAgentIdentity());
+    assertEquals(agentIdentity, original.getIdentity());
+    assertEquals(1, received.getState());
+  }
+}
